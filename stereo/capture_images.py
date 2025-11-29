@@ -1,66 +1,99 @@
+import argparse
 import cv2
-import glob
-import numpy as np
+import pathlib
 import time
-import matplotlib.pyplot as plt
 import os
 
-FOLDER = "checkerboard"
-os.makedirs(FOLDER, exist_ok=True)
+def capture_images(dst_path: pathlib.Path):
+    
+    # Create the destination location
+    os.makedirs(dst_path, exist_ok=False)
+    print(f"Writing images to {str(dst_path.resolve())}.")
 
-# Open cameras
-cam_l = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-cam_r = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+    # Open cameras
+    cam_l = cv2.VideoCapture(1, cv2.CAP_DSHOW)  # Left camera
+    cam_r = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Right camera
 
-if not cam_l.isOpened() or not cam_r.isOpened():
-    raise RuntimeError("Couldn't open webcams.")
+    if not cam_l.isOpened() or not cam_r.isOpened():
+        raise RuntimeError("Couldn't open webcams.")
 
-# Set matching resolutions and FPS in order to reduce drift between cameras
-for cam in (cam_l, cam_r):
-    cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-    cam.set(cv2.CAP_PROP_FPS, 30)
+    # Set matching resolutions and FPS in order to reduce drift between cameras
+    for cam in (cam_l, cam_r):
+        cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cam.set(cv2.CAP_PROP_FPS, 30)
 
-# Warm up the webcams
-for _ in range(20):
-    cam_l.read()
-    cam_r.read()
+    # Warm up the webcams
+    for _ in range(20):
+        cam_l.read()
+        cam_r.read()
 
 
-idx = 0
+    idx = 0
 
-print("Press SPACE to save a stereo pair")
-print("Press q to quit")
+    print("Press SPACE to save a stereo pair")
+    print("Press q to quit")
 
-while True:
-    ts = time.time()
+    while True:
+        # Capture frame
+        ret_r, frame_r = cam_r.read()
+        ret_l, frame_l = cam_l.read()
+        
+        if not ret_r or not ret_l:
+            print("capture failed")
+            continue
 
-    ret_r, frame_r = cam_r.read()
-    ret_l, frame_l = cam_l.read()
+        # Show both feeds
+        cv2.imshow("Right", frame_r)
+        cv2.imshow("Left", frame_l)
 
-    if not ret_r or not ret_l:
-        print("capture failed")
-        continue
+        key = cv2.waitKey(1) & 0xFF
 
-    # Show both feeds
-    cv2.imshow("Right", frame_r)
-    cv2.imshow("Left", frame_l)
+        if key == ord("q"):
+            break
 
-    key = cv2.waitKey(1) & 0xFF
+        if key == ord(" "):
+            # If user presses SPACE, save frames
+            dst_l = str(dst_path / f"left_{idx}.jpg")
+            dst_r = str(dst_path / f"right_{idx}.jpg")
+            cv2.imwrite(dst_l, frame_l)
+            cv2.imwrite(dst_r, frame_r)
 
-    if key == ord("q"):
-        break
+            print(f"Saved pair {idx}")
 
-    if key == ord(" "):
-        # Save frames
-        cv2.imwrite(f"{FOLDER}/right_{idx}.jpg", frame_r)
-        cv2.imwrite(f"{FOLDER}/left_{idx}.jpg", frame_l)
+            idx += 1
 
-        print(f"Saved pair {idx}")
+    cam_l.release()
+    cam_r.release()
 
-        idx += 1
+    cv2.destroyAllWindows()
 
-cam_l.release()
-cam_r.release()
 
-cv2.destroyAllWindows()
+def cleanup_empty_dst_path(dst_path: pathlib.Path):
+    """If no images were recorded, delete the destination folder
+    to keep things clean.
+    """
+    if dst_path.is_dir() and not any(dst_path.iterdir()):
+        dst_path.rmdir()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--dirname',
+        type=pathlib.Path,
+        help='Name of folder to store images'
+    )
+    args = parser.parse_args()
+
+    dirname = args.dirname or str(int(time.time()))
+    dst_path = pathlib.Path('data') / dirname
+    
+    # Start capture loop
+    try:
+        capture_images(
+            dst_path=dst_path,
+        )
+    finally:
+        # If no images were captured, clean up the folder
+        cleanup_empty_dst_path(dst_path)
+
