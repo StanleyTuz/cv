@@ -1,3 +1,5 @@
+# Project 04: Epipolar Geometry
+
 In this project, I start exploring epipolar geometry, which encodes the relationship between two images of the same scene as taken by different cameras. There are two main workflows that I work through here.
 
 ## Uncalibrated Workflow
